@@ -1,0 +1,7 @@
+language: jvm
+fuzz_targets:
+  - ConnectionPoolFuzzer
+  - PacketAssemblerFuzzer
+  - ProtocolParserFuzzer
+  - SessionManagerFuzzer
+  - StateMachineFuzzer
