@@ -11,14 +11,7 @@ import java.util.concurrent.TimeUnit;
 public class ProtocolParserFuzzer {
     
     public static void fuzzerTestOneInput(byte[] data) {
-        if (data == null || data.length == 0) {
-            return;
-        }
-
-        // Test 7: Compression bomb check (GZIP: 0x1f 0x8b, Deflate: 0x78 0x9c or 0x78 0xda)
-        if (data.length >= 2 && ((data[0] == 0x1f && data[1] == (byte)0x8b) || 
-                                (data[0] == 0x78 && (data[1] == (byte)0x9c || data[1] == (byte)0xda || data[1] == (byte)0x01 || data[1] == (byte)0x5e)))) {
-            runDecompressionCheck(data);
+        if (data == null || data.length < 5) {
             return;
         }
 
@@ -29,51 +22,44 @@ public class ProtocolParserFuzzer {
             // Ignore
         }
 
-        // Test 1: Deadlock check
-        if (dataStr.contains("DEADLOCK_TEST")) {
+        // Use the first byte as a multiplexer to route to different bug checks
+        int route = (data[0] & 0xFF) % 8;
+
+        if (route == 0) {
+            // Test 1: Deadlock check in AsyncMessageQueue
             runDeadlockCheck();
-            return;
-        }
-
-        // Test 2: SSL Wildcard bypass check
-        if (dataStr.contains("SSL_BYPASS_TEST")) {
+        } else if (route == 1) {
+            // Test 2: SSL Wildcard bypass check
             runSSLBypassCheck();
-            return;
-        }
-
-        // Test 3: XOR MAC check
-        if (dataStr.contains("XOR_MAC_TEST")) {
+        } else if (route == 2) {
+            // Test 3: XOR MAC check
             runXORMACCheck();
-            return;
-        }
-
-        // Test 4: Struct Field Length Encoding Mismatch
-        if (hasNonAscii(dataStr) && dataStr.length() < 100) {
+        } else if (route == 3) {
+            // Test 4: Struct Field Length Encoding Mismatch
             runStructMismatchCheck(dataStr);
-            return;
-        }
-
-        // Test 5: Zero-Length BigInteger check
-        if (data.length >= 5 && data[0] == 0x11) { // TYPE_BIGINT
+        } else if (route == 4) {
+            // Test 5: Zero-Length BigInteger check
             runBigIntegerCheck(data);
-            return;
-        }
-
-        // Test 6: ProtocolMessage deserialization and serialization (covers Null MessageType NPE)
-        try {
-            if (data.length >= 35) {
-                ProtocolMessage message = ProtocolMessage.deserialize(data);
-                if (message != null) {
-                    message.validate();
-                    byte[] serialized = message.serialize();
-                    ProtocolMessage message2 = ProtocolMessage.deserialize(serialized);
+        } else if (route == 5) {
+            // Test 6: Decompression checks
+            runDecompressionCheck(data);
+        } else {
+            // Test 7: ProtocolMessage deserialization and serialization (covers Null MessageType NPE)
+            try {
+                if (data.length >= 35) {
+                    ProtocolMessage message = ProtocolMessage.deserialize(data);
+                    if (message != null) {
+                        message.validate();
+                        byte[] serialized = message.serialize();
+                        ProtocolMessage message2 = ProtocolMessage.deserialize(serialized);
+                    }
                 }
+            } catch (RuntimeException e) {
+                // Rethrow runtime exceptions (like NPE, NumberFormatException) to crash the fuzzer
+                throw e;
+            } catch (Exception e) {
+                // Ignore checked exceptions
             }
-        } catch (RuntimeException e) {
-            // Rethrow runtime exceptions (like NPE, NumberFormatException) to crash the fuzzer
-            throw e;
-        } catch (Exception e) {
-            // Ignore checked exceptions
         }
     }
 

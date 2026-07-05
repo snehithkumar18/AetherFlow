@@ -24,7 +24,8 @@ public class SessionManagerFuzzer {
             // Ignore
         }
 
-        if (dataStr.contains("CONCURRENCY_TEST")) {
+        // 20% of inputs will run the concurrency check directly
+        if (data.length > 5 && ((data[0] & 0xFF) % 5 == 0)) {
             runConcurrencyCheck();
             return;
         }
